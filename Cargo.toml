@@ -1,0 +1,30 @@
+[package]
+name = "space_trak_test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sgp4 = "2.2.0"
+chrono = {version = "0.4.38", default-features = false}
+serde = {version = "1.0", default-features = false, optional = true}
+serde_json = {version = "1.0", default-features = false, optional = true}
+num-traits = {version = "0.2.19", default-features = false, optional = true}
+anyhow = {version = "1.0", default-features = false}
+ureq = {version = "2.9.7", features = ["json"]}
+libm = "0.2.8"
+
+[features]
+default = ["alloc", "std", "serde"]
+alloc = []
+serde = [
+    "alloc",
+    "chrono/serde",
+    "serde/alloc",
+    "serde/derive",
+    "serde_json/alloc",
+]
+std = ["alloc", "anyhow/std", "chrono/std", "serde?/std", "serde_json?/std"]
+libm = ["dep:num-traits", "num-traits/libm"]
+
+[profile.release]
+opt-level = "s"
