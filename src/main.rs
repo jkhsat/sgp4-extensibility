@@ -1,3 +1,4 @@
+use std::arch::x86_64::_CMP_FALSE_OQ;
 use std::borrow::Borrow;
 use std::{thread, time};
 use std::fs::File;
@@ -17,7 +18,7 @@ fn main() -> anyhow::Result<()> {
 
     // println!("{}", message);
 
-    let file = File::open("src/tls.txt")?;
+    let file = File::open("src/tle2.txt")?;
     let reader = BufReader::new(file);
     let mut tle_string: String = String::from("");
 
@@ -28,13 +29,19 @@ fn main() -> anyhow::Result<()> {
         tle_string.push_str("\n");
     }
 
-    let elements_vec = parse_3les(&tle_string)?;
+    let elements_vec: Vec<sgp4::Elements> = parse_3les(&tle_string)?;
 
-    // What is our observer location?
+    // get observer location
 
     // Get satellite position (lets do one satellite for now)
-    let constants = sgp4::Constants::from_elements(&elements_vec[0])?;
-    let prediction = constants.propagate(sgp4::MinutesSinceEpoch(( m_sec ) as f64))?;
+    let constants: sgp4::Constants = sgp4::Constants::from_elements(&elements_vec[0])?;
+    println!("{:?}", elements_vec[0].datetime); 
+    
+    for n in 0..=10 {
+        let prediction = constants.propagate(sgp4::MinutesSinceEpoch(( n * 10 ) as f64))?;
+        println!("{:?}", satutil::to_geodetic(prediction, &elements_vec[0]).unwrap().geo_pos);
+    }
+    
 
     // Get look angle (need obs location for this)
 
