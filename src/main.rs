@@ -34,12 +34,12 @@ fn main() -> anyhow::Result<()> {
 
     // Get satellite position (lets do one satellite for now)
     let constants: sgp4::Constants = sgp4::Constants::from_elements(&elements_vec[0])?;
-    println!("{:?}", elements_vec[0].datetime); 
+    // println!("{:?}", elements_vec[0].datetime); 
     
-    for n in 0..=10 {
+    for n in 0..=9 {
         let prediction = constants.propagate(sgp4::MinutesSinceEpoch(( n * 10 ) as f64))?;
-        let geodet_struct = satutil::to_geodetic(prediction, &elements_vec[0]).unwrap();
-        println!("Lat: {:?}\t Lon: {:?}\t Alt{:?}", geodet_struct.s_lat, geodet_struct.s_lat, geodet_struct.s_alt); 
+        let geodet_struct = satutil::to_geodetic(prediction, &elements_vec[0], n * 10 ).unwrap();
+        println!("Lat: {:?}\t Lon: {:?}\t Alt {:?}", geodet_struct.s_lat, geodet_struct.s_lon, geodet_struct.s_alt); 
     }
     
 

@@ -11,17 +11,24 @@ pub struct Geodetic {
     pub s_alt: f64,
 }
 
-pub fn to_geodetic(sat_prediction: sgp4::Prediction, sat_elements: &sgp4::Elements) -> core::result::Result<Geodetic, sgp4::Error> { 
+pub fn to_geodetic(sat_prediction: sgp4::Prediction, sat_elements: &sgp4::Elements, t_elapsed: i64) -> core::result::Result<Geodetic, sgp4::Error> { 
+
+    // Update a temp epoch with the elapsed time in order to calculate updated sidreal.
+    // this fixes the mismatched longitude calculation between Daniel Warner and neuromorphic implementations
+    // Think about refactoring this function now that it works?
+    let t_delta: chrono::TimeDelta = chrono::TimeDelta::minutes(t_elapsed);
+    let updated_time = &sat_elements.datetime.checked_add_signed(t_delta).unwrap();
 
     // Prediction x,y,z? degree
     let theta = ac_tan(sat_prediction.position[1], sat_prediction.position[0]);
+
     let r: f64 = ((sat_prediction.position[0] * sat_prediction.position[0]) + (sat_prediction.position[1] * sat_prediction.position[1])).sqrt();
     let e2: f64 = K_F * (2.0 - K_F);
     let mut c;
     let mut phi: f64;
     let mut cnt = 0;
-
-    let mut lon: f64 = wrap_neg_pos_pi(theta - iau_epoch_to_sidereal_time(sat_elements.epoch()));
+    
+    let mut lon: f64 = wrap_neg_pos_pi(theta - iau_epoch_to_sidereal_time(sgp4::julian_years_since_j2000(updated_time)));
     let mut lat = ac_tan(sat_prediction.position[2], r);
 
     // phi = geocentric latitude
@@ -42,11 +49,6 @@ pub fn to_geodetic(sat_prediction: sgp4::Prediction, sat_elements: &sgp4::Elemen
     let alt: f64 = r / lat.cos() - K_XKMPER * c;
 
     lat = radians_to_degrees(lat);
-    // TODO: this lon does not match the cpp port by Daniel Warner.
-    //       double check lon calculations. From TLE parsing to here.
-    //       Lat and Alt is pretty close, I believe the propagation is different
-    //       between the neuromorphic implementation and the DWarner implementation.
-    //       Need to find a known TLE / propagation to compare accuracy between the two.
     lon = radians_to_degrees(lon);
 
     let geo = Geodetic {
@@ -92,3 +94,15 @@ pub fn mod_helper(x: f64, y: f64) -> f64 {
 pub fn radians_to_degrees(radians: f64) -> f64 { 
     return radians * 180.0 / K_PI;
 }
+
+// pub fn add_minutes(minutes: f64) -> sgp4::MinutesSinceEpoch { 
+
+// }
+
+// pub fn add_microseconds(microseconds: f64) -> sgp4::MinutesSinceEpoch { 
+
+// }
+
+// pub fn add_ticks(ticks: u64) -> sgp4::MinutesSinceEpoch { 
+
+// }
