@@ -1,6 +1,5 @@
-use std::arch::x86_64::_CMP_FALSE_OQ;
-use std::borrow::Borrow;
-use std::{thread, time};
+// use std::borrow::Borrow;
+// use std::{thread, time};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use sgp4::parse_3les;
@@ -9,12 +8,12 @@ mod satutil;
 fn main() -> anyhow::Result<()> {
 
     // let elements_vec: Vec<sgp4::Elements> = response.into_json()?;
-    let sleep_dur = time::Duration::from_millis( 31 );
-    let one_sec = time::Duration::from_secs( 1 );
+    // let sleep_dur = time::Duration::from_millis( 31 );
+    // let one_sec = time::Duration::from_secs( 1 );
     // let ten_sec = time::Duration::from_secs( 10 );
-    let one_day = time::Duration::from_secs( 60 * 60 * 24 );
-    let now = time::Instant::now(); 
-    let mut m_sec: f64 = 32.0 / 60000.0;
+    // let one_day = time::Duration::from_secs( 60 * 60 * 24 );
+    // let now = time::Instant::now(); 
+    // let mut m_sec: f64 = 32.0 / 60000.0;
 
     // println!("{}", message);
 
@@ -39,7 +38,8 @@ fn main() -> anyhow::Result<()> {
     
     for n in 0..=10 {
         let prediction = constants.propagate(sgp4::MinutesSinceEpoch(( n * 10 ) as f64))?;
-        println!("{:?}", satutil::to_geodetic(prediction, &elements_vec[0]).unwrap().geo_pos);
+        let geodet_struct = satutil::to_geodetic(prediction, &elements_vec[0]).unwrap();
+        println!("Lat: {:?}\t Lon: {:?}\t Alt{:?}", geodet_struct.s_lat, geodet_struct.s_lat, geodet_struct.s_alt); 
     }
     
 
