@@ -44,11 +44,12 @@ pub fn to_geodetic(sat_prediction: sgp4::Prediction, sat_elements: &sgp4::Elemen
         let sinphi: f64 = phi.sin();
         c = 1.0 / (1.0 - e2 * sinphi * sinphi).sqrt();
         lat = ac_tan(sat_prediction.position[2] + kXKMPER * c * e2 * sinphi, r);
-        cnt += 1;
 
         if fabs(lat - phi) < 1e-10 || cnt >= 10 { 
             break;
         }
+
+        cnt += 1;
     }
 
     let alt: f64 = r / lat.cos() - kXKMPER * c;
