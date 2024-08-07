@@ -1,88 +1,47 @@
-// use std::borrow::Borrow;
-// use std::{thread, time};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use sgp4::parse_3les;
 mod satutil;
+pub mod observer;
+use crate::observer::Observer;
+pub mod satellite;
+use crate::satellite::Satellite;
+pub mod coord_systems;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()>{
+    let file = File::open("src/tle2.txt").unwrap();
+    let reader = BufReader::new(file); 
+    let mut tle_string = String::from("");
 
-    // let elements_vec: Vec<sgp4::Elements> = response.into_json()?;
-    // let sleep_dur = time::Duration::from_millis( 31 );
-    // let one_sec = time::Duration::from_secs( 1 );
-    // let ten_sec = time::Duration::from_secs( 10 );
-    // let one_day = time::Duration::from_secs( 60 * 60 * 24 );
-    // let now = time::Instant::now(); 
-    // let mut m_sec: f64 = 32.0 / 60000.0;
-
-    // println!("{}", message);
-
-    let file = File::open("src/tle2.txt")?;
-    let reader = BufReader::new(file);
-    let mut tle_string: String = String::from("");
-
-    for line in reader.lines() {
-        let temp_string = line;
-
-        tle_string.push_str(temp_string.unwrap().as_str());
+    for line in reader.lines() { 
+        tle_string.push_str(line.unwrap().as_str());
         tle_string.push_str("\n");
     }
-
-    let elements_vec: Vec<sgp4::Elements> = parse_3les(&tle_string)?;
-
-    // get observer location
-
-    // Get satellite position (lets do one satellite for now)
-    let constants: sgp4::Constants = sgp4::Constants::from_elements(&elements_vec[0])?;
-    // println!("{:?}", elements_vec[0].datetime); 
     
-    for n in 0..=9 {
-        let prediction = constants.propagate(sgp4::MinutesSinceEpoch(( n * 10 ) as f64))?;
-        let geodet_struct = satutil::to_geodetic(prediction, &elements_vec[0], n * 10 ).unwrap();
-        println!("Lat: {:?}\t Lon: {:?}\t Alt {:?}", geodet_struct.s_lat, geodet_struct.s_lon, geodet_struct.s_alt); 
+    let sat_elements = parse_3les(&tle_string).unwrap();
+    
+    // Only 1 sat element in the TLE
+    let sat_constants = sgp4::Constants::from_elements(&sat_elements[0]).unwrap();
+    
+    let mut obs: Observer = Observer::new([51.507406923983446, -0.12773752212524414, 0.05]);
+    let mut sat_state: satellite::Satellite = Satellite::new();
+
+    for n in 0..=9 { 
+        let elapsed_time = n * 10;
+        let time_delta = chrono::TimeDelta::minutes(elapsed_time);
+        let new_epoch = &sat_elements[0].datetime.checked_add_signed(time_delta).unwrap();
+        // The propagate function returns position as TEME reference frame coordinates in km and
+        // returns velocity in each dimension in terms of km/s
+        let prediction: sgp4::Prediction = sat_constants.propagate(sgp4::MinutesSinceEpoch((elapsed_time) as f64))?;
+        // println!("        ṙ = {:?} km.s⁻¹", prediction.velocity);
+
+        // Sets satellite coordinates for all reference frames
+        sat_state.update_sat_state(&prediction, &new_epoch);
+
+        // Update observer state to pull in new teme coords with respect to new epoch
+        obs.update_state(new_epoch);
+
     }
-    
 
-    // Get look angle (need obs location for this)
-
-    // Convert sat location to geodetic. Need to do this for distance calculation
-
-
-    
-    return Ok(());
-
-
-    // loop {
-    //     // timestamp to verify speed
-    //     let poll_timer = time::Instant::now();
-        
-    //     for element in &elements_vec {
-    //         let constants: sgp4::Constants = sgp4::Constants::from_elements(element)?;
-    //         let prediction = constants.propagate(sgp4::MinutesSinceEpoch(( m_sec ) as f64))?;
-    //         println!("        r = {:?} km", prediction.position);
-            
-    //         // custom function for converting TEME to ECEF
-    //         // use this: https://mycoordinates.org/tracking-satellite-footprints-on-earth%E2%80%99s-surface/
-    //         // satutil::to_ecef(&mut prediction.position)
-    //     }
-    //     assert!(poll_timer.elapsed() < sleep_dur);
-
-    //     // Sleep 31ms to simulate 32Hz polling time. 
-    //     let sleep_check = time::Instant::now();
-    //     thread::sleep(sleep_dur);
-    //     assert!(sleep_check.elapsed() >= sleep_dur);
-        
-    //     // Hey we slept for 32ms... increment 
-    //     m_sec += 32.0 / 60000.0;
-
-    //     // Stop case timestamp
-    //     let timestamp = now.elapsed();
-    //     //println!("        elapsed time: {timestamp:?}");
-    
-    //     if timestamp >= one_day {
-    //         return Ok(())
-    //     }
-    // }
-
-
+    Ok(())
 }

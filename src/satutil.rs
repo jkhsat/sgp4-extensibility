@@ -1,164 +1,143 @@
+use chrono::NaiveDateTime;
 use sgp4::iau_epoch_to_sidereal_time;
+use sgp4::WGS84;
+use crate::coord_systems::{ECEF, Geodetic, TEME};
 
-const K_PI: f64 = 3.14159265358979323846264338327950288419716939937510582;
-const K_TWO_PI: f64 = K_PI * 2.0;
-const K_F: f64 = 1.0 / 298.26;
-const K_XKMPER: f64 = 6378.135;
+const FLAT_FACTOR: f64 = 1.0 / 298.26; // WGS84 flattening factor.
+const E2: f64 = 6.69437999014e-3;      // Square of first eccentricity.
+const OMEGA_E: f64 = 1.00273790934;
+const SECONDS_PER_DAY: f64 = 86400.0;
+const MFACTOR: f64 = (core::f64::consts::PI * 2.0) * (OMEGA_E / SECONDS_PER_DAY);
 
-// maybe sgp4 has these constants already 
-const SM_AXIS: f64 = 6378.137; // Earth's semi-major axis.
-const E2: f64 = 6.69437999014e-3; // Square of first eccentricity.
+pub fn get_teme(geo_coords: &Geodetic, new_epoch: &NaiveDateTime) -> TEME { 
+    let sidereal = to_sidereal(&new_epoch);
 
-pub struct Geodetic { 
-    pub geo_lat: f64,
-    pub geo_lon: f64,
-    pub geo_alt: f64,
+    let lat_rad = degrees_to_radians(&geo_coords.latitude);
+    let lon_rad = degrees_to_radians(&geo_coords.longitude);
+
+    // Calculate Local Mean Sidereal Time for observers longitude
+    let theta = to_local_sidereal_time(lon_rad, &sidereal);
+
+    let c: f64 = 1.0
+        / (1.0 + FLAT_FACTOR * (FLAT_FACTOR - 2.0) * lat_rad.sin().powf(2.0)).sqrt();
+    let s = (1.0 - FLAT_FACTOR).powf(2.0) * c;
+    let achcp: f64 = (WGS84.ae * c + geo_coords.altitude) * lat_rad.cos();
+
+    
+    // X position in km
+    // Y position in km
+    // Z position in km
+    // W magnitude in km
+    let pos_x = achcp * theta.cos();
+    let pos_y = achcp * theta.sin();
+    let pos_z = (WGS84.ae * s + geo_coords.altitude) * lat_rad.sin();
+    let pos_w = (pos_x * pos_x + pos_y * pos_y + pos_z * pos_z).sqrt();
+
+    // X velocity in km/s
+    // Y velocity in km/s
+    // Z velocity in km/s
+    // W magnitude in km/s
+    let velo_x = -MFACTOR * pos_y;
+    let velo_y = MFACTOR * pos_x;
+    let velo_z = 0.0;
+    let velo_w = (velo_x * velo_x + velo_y * velo_y + velo_z * velo_z).sqrt();
+
+    TEME { 
+        pos_vector: [pos_x, pos_y, pos_z],
+        pos_magnitude: pos_w,
+        velo_vector: [velo_x, velo_y, velo_z],
+        velo_magnitude: velo_w,
+        sidereal: sidereal,
+    }
 }
 
-pub struct ECEF {
-    pub ecef_x: f64,
-    pub ecef_y: f64,
-    pub ecef_z: f64,
-}
+pub fn get_geodetic(propagation: &sgp4::Prediction, updated_epoch: &NaiveDateTime) -> Geodetic {
+    let sidereal = to_sidereal(updated_epoch);
 
-/// Convert TEME coordinates from sgp4::propagate to geodetic coordinates lat/long/alt
-/// At time of writing this comment I am a rust noob... I am sure there is a better way to write
-/// this function. I will figure that out later. 
-pub fn to_geodetic(sat_prediction: sgp4::Prediction, sat_elements: &sgp4::Elements, t_elapsed: i64) -> core::result::Result<Geodetic, sgp4::Error> { 
-
-    // Update a temp epoch with the elapsed time in order to calculate updated sidreal.
-    // this fixes the mismatched longitude calculation between Daniel Warner and neuromorphic implementations
-    // Think about refactoring this function now that it works?
-    let t_delta: chrono::TimeDelta = chrono::TimeDelta::minutes(t_elapsed);
-    let updated_time = &sat_elements.datetime.checked_add_signed(t_delta).unwrap();
-    let theta = ac_tan(sat_prediction.position[1], sat_prediction.position[0]);
-    let r: f64 = ((sat_prediction.position[0] * sat_prediction.position[0]) + (sat_prediction.position[1] * sat_prediction.position[1])).sqrt();
-    let e2: f64 = K_F * (2.0 - K_F);
-    let mut c;
+    let theta = propagation.position[1].atan2(propagation.position[0]);
+    let r = ((propagation.position[0] * propagation.position[0]) + (propagation.position[1] * propagation.position[1])).sqrt();
+    let e2 = FLAT_FACTOR * (2.0 - FLAT_FACTOR);
+    let mut c: f64;
     let mut phi: f64;
-    let mut cnt = 0;
-    let mut lon: f64 = wrap_neg_pos_pi(theta - iau_epoch_to_sidereal_time(sgp4::julian_years_since_j2000(updated_time)));
-    let mut lat = ac_tan(sat_prediction.position[2], r);
-
+    let mut cnt: i32 = 0;
+    let mut lon: f64 = neg_pos_pi(theta - sidereal);
+    let mut lat = propagation.position[2].atan2(r);
+    
     loop { 
         phi = lat;
-        let sinphi: f64 = phi.sin();
-        c = 1.0 / (1.0 - e2 * sinphi * sinphi).sqrt();
-        lat = ac_tan(sat_prediction.position[2] + K_XKMPER * c * e2 * sinphi, r);
+        c = 1.0 / (1.0 - e2 * phi.sin() * phi.sin()).sqrt();
+        lat = (propagation.position[2] + WGS84.ae * c * e2 * phi.sin()).atan2(r);
 
         if (lat - phi).abs() < 1e-10 || cnt >= 10 { 
             break;
         }
-
         cnt += 1;
     }
 
-    let alt: f64 = r / lat.cos() - K_XKMPER * c;
-
-    lat = radians_to_degrees(lat);
-    lon = radians_to_degrees(lon);
-
-    let geo = Geodetic {
-        geo_lat: lat,
-        geo_lon: lon,
-        geo_alt: alt,
-    };
-
-    Ok(geo)
-
-}
-
-// Observer?
-/// 15 degree look angle max for sat tx
-pub fn get_look_angle() {
-
-}
-
-// Observer?
-/// Return the Satellite sub-points
-/// I think this is basically just lat/long with altitude at 0... need to double check on celestrak
-pub fn get_ssp() { 
-
-}
-
-// Observer?
-// Also I keep using sgp4::Error... Maybe I should add a few error cases to that enum.
-pub fn get_dist_to_satellite(observer: ECEF, satellite: ECEF) -> core::result::Result<ECEF, sgp4::Error> { 
+    let alt = r / lat.cos() - WGS84.ae * c;
+    lat = radians_to_degrees(&lat);
+    lon = radians_to_degrees(&lon);
     
-    // Placeholders
-    // Stick the 3d distance formula in here when I'm not so lazy.
-    let x = 0.0;
-    let y = 0.0;
-    let z = 0.0;
 
-    let distance = ECEF  {
-        ecef_x: x,
-        ecef_y: y,
-        ecef_z: z,
-    };
-
-    Ok(distance)
-}
-
-/// Takes in geodetic coordinates and converts them to ecef coordinates. 
-/// 
-/// Useful for computing the distance between observer and satellite or observer to SSP.
-/// 
-/// Return a struct of ECEF coordinates.
-pub fn geodetic_to_ecef(geo_latitude: &f64, geo_longitude: &f64, geo_altitude: &f64) -> core::result::Result<ECEF, sgp4::Error> { 
-
-    let lat_rad = degrees_to_radians(geo_latitude);
-    let lon_rad: f64 = degrees_to_radians(geo_longitude);
-    let alt_rad: f64 = degrees_to_radians(geo_altitude);
-
-    let N = SM_AXIS / (1.0 - E2 * (lat_rad*lat_rad).sin());
-    let x = (N + alt_rad) * lat_rad.cos() * lon_rad.cos();
-    let y = (N + alt_rad) * lat_rad.cos() * lon_rad.sin();
-    let z = ((1.0 - E2) * N + alt_rad) * lat_rad.sin();
-
-    let ecef = ECEF { 
-        ecef_x: x,
-        ecef_y: y,
-        ecef_z: z,
-    };
-
-    Ok(ecef)
-}
-
-fn ac_tan(sin_x: f64, cos_x: f64) -> f64 { 
-    if cos_x == 0.0 { 
-        if sin_x > 0.0 { 
-            return K_PI / 2.0;
-        }
-        else { 
-            return 3.0 * K_PI / 2.0;
-        }
-    }
-    else { 
-        if cos_x > 0.0 { 
-            return (sin_x / cos_x).atan();
-        }
-        else { 
-            return K_PI + (sin_x / cos_x).atan();
-        }
+    Geodetic { 
+        latitude: lat,
+        longitude: lon,
+        altitude: alt,
     }
 }
 
-fn wrap_neg_pos_pi(a: f64) -> f64 { 
-    return mod_helper(a + K_PI, K_TWO_PI) - K_PI
+pub fn get_ecef(geodetic_coords: &Geodetic) -> ECEF { 
+    let radians_lat = degrees_to_radians(&geodetic_coords.latitude);
+    let radians_lon = degrees_to_radians(&geodetic_coords.longitude);
+    let alt = geodetic_coords.altitude;
+    let N = WGS84.ae / (1.0 - E2 * radians_lat.sin() * radians_lat.sin()).sqrt(); // Prime vertical radius of curvature
+    
+    let ecef_x: f64 = (N + alt) * radians_lat.cos() * radians_lon.cos();
+    let ecef_y: f64 = (N + alt) * radians_lat.cos() * radians_lon.sin();
+    let ecef_z = ((1.0 - E2) * N + alt) * radians_lat.sin();
+
+    ECEF { 
+        x: ecef_x,
+        y: ecef_y,
+        z: ecef_z,
+    }
 }
 
-fn mod_helper(x: f64, y: f64) -> f64 { 
+fn neg_pos_pi(a: f64) -> f64 { 
+    float_mod(a + core::f64::consts::PI, 2.0 * core::f64::consts::PI) - core::f64::consts::PI
+}
+
+fn float_mod(x: f64, y: f64) -> f64 { 
     if y == 0.0 { 
         return x;
     }
-    return x - y * (x / y).floor();
+    x - y * (x / y).floor()
 }
 
-fn radians_to_degrees(radians: f64) -> f64 { 
-    return radians * 180.0 / K_PI;
+pub fn radians_to_degrees(radians: &f64) -> f64 { 
+    radians * 180.0 / core::f64::consts::PI
 }
 
-fn degrees_to_radians(degrees: &f64) -> f64 { 
-    return degrees * K_PI / 180.0
+pub fn degrees_to_radians(degrees: &f64) -> f64 { 
+    degrees * core::f64::consts::PI / 180.0
+}
+
+fn wrap_two_pi(val: f64) -> f64 { 
+    float_mod(val, core::f64::consts::PI * 2.0)
+}
+
+pub fn to_local_sidereal_time(longitude: f64, sidereal_time: &f64) -> f64 { 
+    wrap_two_pi(sidereal_time + longitude)
+}
+
+pub fn to_sidereal(date_time: &NaiveDateTime) -> f64 { 
+    iau_epoch_to_sidereal_time(sgp4::julian_years_since_j2000(date_time))
+}
+
+pub fn sub_vector(vec_a: &[f64; 3], vec_b: &[f64; 3]) -> [f64; 3] { 
+    [vec_a[0] - vec_b[0], vec_a[1] - vec_b[1], vec_a[2] - vec_b[2]]
+}
+
+pub fn dot_prod(vec_a: [f64; 3], vec_b: [f64; 3]) -> f64 { 
+    vec_a[0] * vec_b[0] + vec_a[1] * vec_b[1] + vec_a[2] * vec_b[2]
 }
