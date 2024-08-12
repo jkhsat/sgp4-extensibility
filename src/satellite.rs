@@ -9,11 +9,12 @@ use crate::coord_systems::{TEME, Geodetic, ECEF};
 pub struct Satellite { 
     pub geodetic_coordinates: Geodetic,
     pub teme_coordinates: TEME,
-    pub ecef_coordinates: ECEF, 
+    pub ecef_coordinates: ECEF,
+    pub sat_elements: sgp4::Elements,
 }
 
 impl Satellite {
-    pub fn new() -> Satellite {        
+    pub fn new(sat_elements: sgp4::Elements) -> Satellite {        
         Satellite { 
             geodetic_coordinates: Geodetic { 
                 ..Default::default()
@@ -23,7 +24,8 @@ impl Satellite {
             },
             ecef_coordinates: ECEF { 
                 ..Default::default()
-            }
+            },
+            sat_elements: sat_elements,
         }
     }
 

@@ -2,6 +2,7 @@ use chrono::NaiveDateTime;
 use sgp4::iau_epoch_to_sidereal_time;
 use sgp4::WGS84;
 use crate::coord_systems::{ECEF, Geodetic, TEME};
+use libm::fabs;
 
 const FLAT_FACTOR: f64 = 1.0 / 298.26; // WGS84 flattening factor.
 const E2: f64 = 6.69437999014e-3;      // Square of first eccentricity.
@@ -23,7 +24,6 @@ pub fn get_teme(geo_coords: &Geodetic, new_epoch: &NaiveDateTime) -> TEME {
     let s = (1.0 - FLAT_FACTOR).powf(2.0) * c;
     let achcp: f64 = (WGS84.ae * c + geo_coords.altitude) * lat_rad.cos();
 
-    
     // X position in km
     // Y position in km
     // Z position in km
@@ -68,7 +68,7 @@ pub fn get_geodetic(propagation: &sgp4::Prediction, updated_epoch: &NaiveDateTim
         c = 1.0 / (1.0 - e2 * phi.sin() * phi.sin()).sqrt();
         lat = (propagation.position[2] + WGS84.ae * c * e2 * phi.sin()).atan2(r);
 
-        if (lat - phi).abs() < 1e-10 || cnt >= 10 { 
+        if fabs((lat - phi)) < 1e-10 || cnt >= 10 { 
             break;
         }
         cnt += 1;
@@ -90,7 +90,7 @@ pub fn get_ecef(geodetic_coords: &Geodetic) -> ECEF {
     let radians_lat = degrees_to_radians(&geodetic_coords.latitude);
     let radians_lon = degrees_to_radians(&geodetic_coords.longitude);
     let alt = geodetic_coords.altitude;
-    let N = WGS84.ae / (1.0 - E2 * radians_lat.sin() * radians_lat.sin()).sqrt(); // Prime vertical radius of curvature
+    let N = WGS84.ae / (1.0 - E2 * radians_lat.sin().powf(2.0)).sqrt(); // Prime vertical radius of curvature
     
     let ecef_x: f64 = (N + alt) * radians_lat.cos() * radians_lon.cos();
     let ecef_y: f64 = (N + alt) * radians_lat.cos() * radians_lon.sin();

@@ -1,22 +1,39 @@
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct Geodetic { 
     pub latitude: f64, 
     pub longitude: f64,
     pub altitude: f64,
 }
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct ECEF { 
     pub x: f64,
     pub y: f64,
     pub z: f64
 }
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct TEME { 
     pub pos_vector: [f64; 3],
     pub pos_magnitude: f64,
     pub velo_vector: [f64; 3],
     pub velo_magnitude: f64,
     pub sidereal: f64,
+}
+
+#[derive(Copy, Clone)]
+pub struct LookAngle { 
+    pub azimuth: f64, 
+    pub elevation: f64,
+    pub distance: f64, 
+}
+
+impl Default for LookAngle { 
+    fn default() -> LookAngle { 
+        LookAngle { 
+            azimuth: 0.0,
+            elevation: 0.0,
+            distance: 0.0,
+        }
+    }
 }
 
 impl Default for Geodetic { 
