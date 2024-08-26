@@ -133,11 +133,3 @@ pub fn to_local_sidereal_time(longitude: f64, sidereal_time: &f64) -> f64 {
 pub fn to_sidereal(date_time: &NaiveDateTime) -> f64 { 
     iau_epoch_to_sidereal_time(sgp4::julian_years_since_j2000(date_time))
 }
-
-pub fn sub_vector(vec_a: &[f64; 3], vec_b: &[f64; 3]) -> [f64; 3] { 
-    [vec_a[0] - vec_b[0], vec_a[1] - vec_b[1], vec_a[2] - vec_b[2]]
-}
-
-pub fn dot_prod(vec_a: [f64; 3], vec_b: [f64; 3]) -> f64 { 
-    vec_a[0] * vec_b[0] + vec_a[1] * vec_b[1] + vec_a[2] * vec_b[2]
-}

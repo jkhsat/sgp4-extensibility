@@ -1,29 +1,22 @@
 [package]
-name = "space_trak_test"
+name = "sgp4_util"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 sgp4 = "2.2.0"
 chrono = {version = "0.4.38", default-features = false}
-serde = {version = "1.0", default-features = false, optional = true}
-serde_json = {version = "1.0", default-features = false, optional = true}
-num-traits = {version = "0.2.19", default-features = false, optional = true}
 anyhow = {version = "1.0", default-features = false}
-ureq = {version = "2.9.7", features = ["json"]}
+libm = "0.2.8"
 
 [features]
-default = ["alloc", "std", "serde"]
+default = ["alloc", "std"]
 alloc = []
-serde = [
-    "alloc",
-    "chrono/serde",
-    "serde/alloc",
-    "serde/derive",
-    "serde_json/alloc",
-]
-std = ["alloc", "anyhow/std", "chrono/std", "serde?/std", "serde_json?/std"]
-libm = ["dep:num-traits", "num-traits/libm"]
+std = ["alloc", "anyhow/std", "chrono/std"]
 
 [profile.release]
-opt-level = "s"
+opt-level = 'z'     # Optimize for size
+lto = true          # Enable link-time optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations
+#panic = 'abort'     # Abort on panic
+strip = true        # Strip symbols from binary*
